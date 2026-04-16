@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — CollabNote Pro</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .auth-page { min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; }
+    @media(max-width:768px){.auth-page{grid-template-columns:1fr}.auth-left{display:none}}
+  </style>
+</head>
+<body>
+<div id="toast-container"></div>
+
+<div class="auth-page">
+  <!-- Left Panel -->
+  <div class="auth-left">
+    <div class="auth-left-content">
+      <div style="font-size:3rem;margin-bottom:1rem">📝</div>
+      <h1>CollabNote Pro</h1>
+      <p>Real-time collaborative document editing for teams</p>
+      <ul class="auth-features">
+        <li>Multiple users editing simultaneously</li>
+        <li>Operational Transform — no conflicts</li>
+        <li>In-document chat & comments</li>
+        <li>Version history with one-click restore</li>
+        <li>Secure share links with password protection</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Right Panel -->
+  <div class="auth-right">
+    <div class="auth-box animate-fade">
+      <div class="auth-logo">
+        <div class="logo-icon">📝</div>
+        <span>CollabNote Pro</span>
+      </div>
+
+      <h2 class="auth-title">Welcome back</h2>
+      <p class="auth-subtitle">Sign in to your account to continue</p>
+
+      <div id="errorAlert" class="alert alert-error hidden"></div>
+
+      <form id="loginForm" autocomplete="on">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <div class="input-group">
+            <span class="input-icon">👤</span>
+            <input type="text" id="username" placeholder="Enter your username"
+                   autocomplete="username" required autofocus>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="input-group">
+            <span class="input-icon">🔒</span>
+            <input type="password" id="password" placeholder="Enter your password"
+                   autocomplete="current-password" required>
+            <button type="button" id="togglePwd"
+                    style="position:absolute;right:.75rem;background:none;border:none;cursor:pointer;color:var(--text-light);font-size:.9rem">
+              👁️
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block" id="submitBtn" style="margin-top:.5rem">
+          Sign In
+        </button>
+      </form>
+
+      <div class="divider-text" style="margin:1.5rem 0;font-size:.8rem">OR</div>
+
+      <p style="text-align:center;font-size:.875rem;color:var(--text-muted)">
+        Don't have an account?
+        <a href="/register" style="font-weight:600">Create one →</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';  // same origin
+
+// Toast helper
+function toast(msg, type='info') {
+  const icons = {success:'✅', error:'❌', warning:'⚠️', info:'ℹ️'};
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ️'}</span><span class="toast-msg">${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>{ el.classList.add('toast-out'); setTimeout(()=>el.remove(), 250); }, 3500);
+}
+
+// Toggle password visibility
+document.getElementById('togglePwd').addEventListener('click', () => {
+  const input = document.getElementById('password');
+  input.type = input.type === 'password' ? 'text' : 'password';
+});
+
+// Form submit
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const errorAlert = document.getElementById('errorAlert');
+  errorAlert.classList.add('hidden');
+
+  btn.disabled = true;
+  btn.classList.add('btn-loading');
+  btn.textContent = 'Signing in…';
+
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+
+  try {
+    const res = await fetch(`${API}/api/users/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.detail || 'Login failed');
+    }
+
+    // Store auth data
+    localStorage.setItem('token', data.access_token);
+    localStorage.setItem('user_id', data.user.id);
+    localStorage.setItem('username', data.user.username);
+    localStorage.setItem('avatar_color', data.user.avatar_color);
+    localStorage.setItem('full_name', data.user.full_name || '');
+
+    toast('Welcome back, ' + data.user.username + '!', 'success');
+    setTimeout(() => { window.location.href = '/dashboard'; }, 600);
+
+  } catch (err) {
+    errorAlert.textContent = err.message;
+    errorAlert.classList.remove('hidden');
+    btn.disabled = false;
+    btn.classList.remove('btn-loading');
+    btn.textContent = 'Sign In';
+  }
+});
+
+// Already logged in?
+if (localStorage.getItem('token')) {
+  window.location.href = '/dashboard';
+}
+</script>
+</body>
+</html>

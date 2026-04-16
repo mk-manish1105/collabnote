@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shared Document — CollabNote Pro</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="toast-container"></div>
+
+<!-- Shared header -->
+<div class="shared-header">
+  <div class="flex items-center gap-3">
+    <span style="font-size:1.4rem">📝</span>
+    <div>
+      <div style="font-weight:700;font-size:1.1rem">CollabNote Pro</div>
+      <div style="font-size:.8rem;opacity:.8">Shared Document</div>
+    </div>
+  </div>
+  <div class="flex gap-3 items-center" id="headerActions">
+      <!-- filled dynamically by updateHeaderButton() -->
+    </div>
+</div>
+
+<!-- Password gate -->
+<div id="passwordGate" class="hidden" style="display:flex;align-items:center;justify-content:center;min-height:60vh">
+  <div class="card animate-fade" style="max-width:400px;width:100%;margin:2rem">
+    <div style="text-align:center;margin-bottom:1.5rem">
+      <div style="font-size:3rem">🔒</div>
+      <h2 style="margin:.5rem 0">Password Required</h2>
+      <p class="text-muted">This document is password-protected</p>
+    </div>
+    <div class="form-group">
+      <label>Enter Password</label>
+      <input type="password" id="linkPassword" placeholder="Document password"
+             onkeydown="if(event.key==='Enter')accessDoc()">
+    </div>
+    <div id="passwordError" class="alert alert-error hidden"></div>
+    <button class="btn btn-primary w-full" onclick="accessDoc()">Access Document</button>
+  </div>
+</div>
+
+<!-- Loading -->
+<div id="loadingState" style="display:flex;align-items:center;justify-content:center;min-height:60vh">
+  <div style="text-align:center">
+    <div class="spinner spinner-lg" style="margin:0 auto 1rem"></div>
+    <p class="text-muted">Loading document…</p>
+  </div>
+</div>
+
+<!-- Document view -->
+<div id="docView" class="hidden">
+  <div style="max-width:820px;margin:0 auto;padding:2rem 1.5rem">
+
+    <!-- Doc info bar -->
+    <div class="flex items-center justify-between" style="margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--border)">
+      <div>
+        <h1 id="docTitle" style="margin-bottom:.25rem">Loading…</h1>
+        <div class="flex gap-3 items-center">
+          <span id="permBadge" class="badge badge-neutral">viewer</span>
+          <span class="text-xs text-muted" id="docMeta"></span>
+        </div>
+      </div>
+      <div class="flex gap-2" id="docActionBtn">
+        <!-- filled dynamically -->
+      </div>
+    </div>
+
+    <!-- Tags -->
+    <div id="docTags" class="flex gap-2 flex-wrap" style="margin-bottom:1rem"></div>
+
+    <!-- Content -->
+    <div id="docContent"
+         style="font-size:1rem;line-height:1.85;font-family:'Georgia',serif;white-space:pre-wrap;word-break:break-word;color:var(--text)">
+    </div>
+
+    <!-- Footer -->
+    <div style="margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <span class="text-muted text-sm">Powered by CollabNote Pro</span>
+      <a href="/register" class="btn btn-primary btn-sm">Create your own →</a>
+    </div>
+  </div>
+</div>
+
+<!-- Error state -->
+<div id="errorState" class="hidden" style="display:flex;align-items:center;justify-content:center;min-height:60vh">
+  <div style="text-align:center;padding:2rem">
+    <div style="font-size:3rem;margin-bottom:1rem" id="errorIcon">⛔</div>
+    <h2 id="errorTitle">Link not found</h2>
+    <p class="text-muted" id="errorMsg" style="margin:.5rem 0 1.5rem"></p>
+    <a href="/" class="btn btn-primary">Go to CollabNote</a>
+  </div>
+</div>
+
+<script>
+const API = '';
+const shareToken = window.location.pathname.split('/').pop();
+const userToken = localStorage.getItem('token');   // logged-in user's JWT
+let needsPassword = false;
+let resolvedDocId = null;   // set after successful access
+
+function toast(msg, type='info') {
+  const icons = {success:'✅', error:'❌', warning:'⚠️', info:'ℹ️'};
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span class="toast-icon">${icons[type]}</span><span class="toast-msg">${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>{el.classList.add('toast-out');setTimeout(()=>el.remove(),250);}, 4000);
+}
+
+// ── Update header + doc action button based on login state ──
+function updateHeaderButton(canEdit, docId) {
+  const header  = document.getElementById('headerActions');
+  const docBtn  = document.getElementById('docActionBtn');
+
+  if (userToken) {
+    // User is already logged in
+    if (canEdit) {
+      const html = `<a href="/editor?id=${docId}" class="btn btn-sm"
+        style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)">
+        ✏️ Open in Editor
+      </a>`;
+      header.innerHTML = html;
+      if (docBtn) docBtn.innerHTML = `<a href="/editor?id=${docId}" class="btn btn-sm btn-primary">✏️ Open in Editor</a>`;
+    } else {
+      // viewer — show dashboard link
+      header.innerHTML = `<a href="/dashboard" class="btn btn-sm"
+        style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)">
+        📋 Go to Dashboard
+      </a>`;
+      if (docBtn) docBtn.innerHTML = `<a href="/dashboard" class="btn btn-sm btn-secondary">📋 Dashboard</a>`;
+    }
+  } else {
+    // Not logged in — show login button, preserve share link in redirect
+    const loginUrl = `/login?next=/shared/${shareToken}`;
+    header.innerHTML = `<a href="${loginUrl}" class="btn btn-sm"
+      style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)">
+      Sign in to edit
+    </a>`;
+    if (docBtn) docBtn.innerHTML = `<a href="${loginUrl}" class="btn btn-sm btn-primary">📝 Sign in to edit</a>`;
+  }
+}
+
+function showError(icon, title, msg) {
+  document.getElementById('loadingState').classList.add('hidden');
+  document.getElementById('passwordGate').classList.add('hidden');
+  document.getElementById('errorState').classList.remove('hidden');
+  document.getElementById('errorState').style.display = 'flex';
+  document.getElementById('errorIcon').textContent = icon;
+  document.getElementById('errorTitle').textContent = title;
+  document.getElementById('errorMsg').textContent = msg;
+}
+
+async function init() {
+  try {
+    const res = await fetch(`${API}/api/sharing/info/${shareToken}`);
+    if (!res.ok) {
+      showError('🔗', 'Link not found', 'This share link does not exist or has been revoked.');
+      return;
+    }
+    const info = await res.json();
+
+    if (!info.is_active) {
+      showError('⛔', 'Link revoked', 'This share link has been deactivated by the document owner.');
+      return;
+    }
+
+    needsPassword = info.has_password;
+    document.getElementById('loadingState').classList.add('hidden');
+
+    if (needsPassword) {
+      document.getElementById('passwordGate').classList.remove('hidden');
+      document.getElementById('passwordGate').style.display = 'flex';
+      setTimeout(() => document.getElementById('linkPassword').focus(), 100);
+    } else {
+      await accessDoc();
+    }
+  } catch (err) {
+    showError('😕', 'Something went wrong', err.message);
+  }
+}
+
+async function accessDoc() {
+  const password = needsPassword ? document.getElementById('linkPassword')?.value : null;
+  const errEl = document.getElementById('passwordError');
+  if (errEl) errEl.classList.add('hidden');
+
+  try {
+    const res = await fetch(`${API}/api/sharing/access/${shareToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: password || null })
+    });
+    const data = await res.json();
+
+    if (res.status === 401 || res.status === 403) {
+      if (errEl) { errEl.textContent = data.detail || 'Incorrect password'; errEl.classList.remove('hidden'); }
+      return;
+    }
+    if (res.status === 410) {
+      showError('⏰', 'Link expired', data.detail || 'This link is no longer valid.');
+      return;
+    }
+    if (!res.ok) throw new Error(data.detail || 'Access failed');
+
+    document.getElementById('passwordGate').classList.add('hidden');
+    document.getElementById('loadingState').classList.add('hidden');
+    renderDoc(data);
+
+  } catch (err) {
+    showError('😕', 'Error', err.message);
+  }
+}
+
+function renderDoc(data) {
+  const doc = data.document;
+  resolvedDocId = doc.id;
+
+  document.getElementById('docView').classList.remove('hidden');
+  document.getElementById('docView').style.display = 'block';
+
+  document.title = doc.title + ' — CollabNote Pro';
+  document.getElementById('docTitle').textContent = doc.title;
+
+  const perm = data.permission;
+  const badge = document.getElementById('permBadge');
+  badge.textContent = perm === 'editor' ? '✏️ Editor access' : '👁️ View only';
+  badge.className = `badge ${perm === 'editor' ? 'badge-success' : 'badge-neutral'}`;
+
+  const updated = new Date(doc.updated_at).toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric'
+  });
+  document.getElementById('docMeta').textContent = `Last updated ${updated}`;
+
+  if (doc.tags && doc.tags.length) {
+    document.getElementById('docTags').innerHTML = doc.tags.map(t =>
+      `<span class="badge badge-neutral">${t}</span>`
+    ).join('');
+  }
+
+  const content = doc.content || '';
+  document.getElementById('docContent').textContent = content;
+  if (!content.trim()) {
+    document.getElementById('docContent').innerHTML =
+      '<em style="color:var(--text-light)">This document is empty</em>';
+  }
+
+  // ✅ Key fix: update both buttons based on actual login state
+  updateHeaderButton(data.can_edit, doc.id);
+
+  // If logged in with editor access, also show a banner
+  if (data.can_edit && userToken) {
+    document.getElementById('docView').insertAdjacentHTML('afterbegin', `
+      <div class="alert alert-info animate-fade"
+           style="max-width:820px;margin:1rem auto 0">
+        ✏️ You have <strong>editor</strong> access via this link.
+        <a href="/editor?id=${doc.id}" style="font-weight:600;margin-left:.5rem">
+          Open in Editor →
+        </a>
+      </div>
+    `);
+  }
+}
+
+init();
+</script>
+</body>
+</html>

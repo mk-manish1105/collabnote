@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Editor — CollabNote Pro</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    body { overflow: hidden; }
+
+    /* Sidebar chat needs flex layout */
+    #chatPanel {
+      display: none;
+      flex-direction: column;
+      height: 100%;
+      padding: 0;
+    }
+    #chatPanel.active { display: flex; }
+    #chatMessagesWrap {
+      flex: 1;
+      overflow-y: auto;
+      padding: .75rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: .65rem;
+    }
+
+    /* Collaborator role badge pill in header */
+    .role-pill {
+      font-size: .7rem;
+      padding: .15rem .55rem;
+      border-radius: var(--r-full);
+      font-weight: 600;
+    }
+    .role-pill.owner  { background:#ddd6fe;color:#4c1d95; }
+    .role-pill.editor { background:#d1fae5;color:#065f46; }
+    .role-pill.viewer { background:#fef3c7;color:#92400e; }
+
+    /* Collab version item restore button */
+    .version-restore-btn {
+      display: none;
+      font-size: .72rem;
+      margin-top: .3rem;
+      padding: .2rem .55rem;
+      border-radius: var(--r-sm);
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      background: none;
+      cursor: pointer;
+    }
+    .version-item:hover .version-restore-btn { display: inline-block; }
+  </style>
+</head>
+<body>
+<div id="toast-container"></div>
+
+<div class="editor-layout">
+
+  <!-- ── Top bar ──────────────────────────────────────── -->
+  <div class="editor-topbar">
+    <a href="/dashboard" class="btn btn-ghost btn-sm btn-icon" title="Back to dashboard">←</a>
+
+    <input type="text" class="editor-title-input" id="docTitle"
+           placeholder="Untitled Document" maxlength="200">
+
+    <span class="role-pill" id="rolePill">Loading…</span>
+
+    <div class="flex gap-2 items-center" style="margin-left:auto">
+      <!-- Typing indicators -->
+      <div class="typing-indicators" id="typingIndicators"></div>
+
+      <!-- Save indicator -->
+      <div class="save-indicator" id="saveIndicator">
+        <span class="status-dot connecting" id="statusDot"></span>
+        <span id="statusText">Connecting…</span>
+      </div>
+
+      <button class="btn btn-sm btn-secondary" id="saveBtn" onclick="saveNow()">💾 Save</button>
+      <button class="btn btn-sm btn-primary" id="shareBtn" onclick="openShareModal()">🔗 Share</button>
+      <button class="btn btn-ghost btn-sm btn-icon" id="darkBtn" title="Dark mode">🌙</button>
+      <button class="btn btn-ghost btn-sm btn-icon" onclick="toggleSidebar()" title="Toggle sidebar">⇥</button>
+    </div>
+  </div>
+
+  <!-- ── Readonly banner ─────────────────────────────── -->
+  <div class="readonly-banner hidden" id="readonlyBanner">
+    👁️ <strong>View-only mode</strong> — you can read but not edit this document.
+  </div>
+
+  <!-- ── Editor body ─────────────────────────────────── -->
+  <div class="editor-body">
+
+    <!-- Main editing area -->
+    <div class="editor-main">
+      <textarea class="editor-textarea" id="editor"
+                placeholder="Start typing your document here…"
+                spellcheck="true"></textarea>
+
+      <!-- Status bar -->
+      <div class="editor-statusbar">
+        <span id="wordCount">0 words</span>
+        <span id="charCount">0 chars</span>
+        <span id="lineCount">1 line</span>
+        <span style="margin-left:auto" id="versionLabel">v1</span>
+        <span id="autosaveLabel"></span>
+      </div>
+    </div>
+
+    <!-- ── Sidebar ──────────────────────────────────── -->
+    <div class="editor-sidebar" id="editorSidebar">
+
+      <!-- Tabs -->
+      <div class="sidebar-tabs">
+        <button class="sidebar-tab active" data-tab="usersPanel" onclick="switchTab('usersPanel', this)">👥 Users</button>
+        <button class="sidebar-tab" data-tab="chatPanel" onclick="switchTab('chatPanel', this)">💬 Chat</button>
+        <button class="sidebar-tab" data-tab="historyPanel" onclick="switchTab('historyPanel', this)">🕐 History</button>
+      </div>
+
+      <!-- Users Panel -->
+      <div class="sidebar-panel active" id="usersPanel">
+        <div style="margin-bottom:1rem">
+          <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.6rem">
+            Active Now (<span id="activeCount">0</span>)
+          </div>
+          <div id="activeUsersList"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div>
+          <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.6rem">
+            Collaborators
+          </div>
+          <div id="collaboratorsList"></div>
+
+          <button class="btn btn-secondary btn-sm w-full mt-3" id="addCollabBtn"
+                  onclick="openCollabModal()" style="display:none">
+            ＋ Add Collaborator
+          </button>
+        </div>
+      </div>
+
+      <!-- Chat Panel -->
+      <div id="chatPanel">
+        <div id="chatMessagesWrap">
+          <div class="text-muted text-sm" style="text-align:center;padding:1rem" id="chatEmpty">
+            No messages yet. Say hello! 👋
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <textarea class="chat-input" id="chatInput" placeholder="Type a message…" rows="1"
+                    onkeydown="handleChatKey(event)"></textarea>
+          <button class="btn btn-primary btn-sm btn-icon" onclick="sendChat()">➤</button>
+        </div>
+      </div>
+
+      <!-- History Panel -->
+      <div class="sidebar-panel" id="historyPanel">
+        <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.75rem">
+          Showing last <strong id="versionCount">0</strong> versions
+        </div>
+        <div id="versionsList"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── Share Modal ───────────────────────────────────── -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <h2>🔗 Share Document</h2>
+      <button class="modal-close" onclick="closeModal('shareModal')">✕</button>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:1.25rem">
+      <button class="sidebar-tab active" onclick="switchShareTab('addCollab')" id="st-addCollab">Add Collaborator</button>
+      <button class="sidebar-tab" onclick="switchShareTab('createLink')" id="st-createLink">Create Link</button>
+      <button class="sidebar-tab" onclick="switchShareTab('manageLinks')" id="st-manageLinks">Links</button>
+    </div>
+
+    <!-- Add Collaborator tab -->
+    <div id="share-addCollab">
+      <div class="form-group">
+        <label>Search user by username</label>
+        <div class="input-group">
+          <span class="input-icon">🔍</span>
+          <input type="text" id="collabSearch" placeholder="Type username…"
+                 oninput="searchUsers(this.value)">
+        </div>
+        <div id="userSearchResults" style="margin-top:.5rem"></div>
+      </div>
+
+      <div class="form-group">
+        <label>Selected user</label>
+        <input type="text" id="collabUsername" placeholder="Username" readonly
+               style="background:var(--bg-sidebar)">
+      </div>
+
+      <div class="form-group">
+        <label>Role</label>
+        <select id="collabRole">
+          <option value="viewer">👁️ Viewer — read only</option>
+          <option value="editor">✏️ Editor — can edit</option>
+        </select>
+      </div>
+
+      <button class="btn btn-primary w-full" onclick="addCollaborator()">Add Collaborator</button>
+    </div>
+
+    <!-- Create Link tab -->
+    <div id="share-createLink" class="hidden">
+      <div class="form-group">
+        <label>Permission</label>
+        <select id="linkPermission">
+          <option value="viewer">👁️ Viewer</option>
+          <option value="editor">✏️ Editor</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Password protection (optional)</label>
+        <input type="password" id="linkPassword" placeholder="Leave blank for no password">
+      </div>
+
+      <div class="form-group">
+        <label>Expires at (optional)</label>
+        <input type="datetime-local" id="linkExpiry">
+      </div>
+
+      <div class="form-group">
+        <label>Max uses (optional)</label>
+        <input type="number" id="linkMaxUses" placeholder="Unlimited" min="1">
+      </div>
+
+      <button class="btn btn-primary w-full" onclick="createShareLink()">Generate Link</button>
+      <div id="createdLinkBox" class="hidden" style="margin-top:1rem">
+        <div class="alert alert-success" style="word-break:break-all;font-size:.82rem" id="createdLinkText"></div>
+        <button class="btn btn-secondary btn-sm" onclick="copyLink()">📋 Copy Link</button>
+      </div>
+    </div>
+
+    <!-- Manage links tab -->
+    <div id="share-manageLinks" class="hidden">
+      <div id="shareLinksList"><div class="text-muted text-sm">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Version Restore Confirm ────────────────────────── -->
+<div class="modal-overlay" id="restoreModal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <h2>⏪ Restore Version?</h2>
+      <button class="modal-close" onclick="closeModal('restoreModal')">✕</button>
+    </div>
+    <p style="color:var(--text-muted);margin-bottom:1.5rem">
+      Restore to <strong id="restoreVersionLabel"></strong>?
+      Your current content will be saved as a new version first.
+    </p>
+    <div class="flex gap-3">
+      <button class="btn btn-secondary" style="flex:1" onclick="closeModal('restoreModal')">Cancel</button>
+      <button class="btn btn-primary" style="flex:1" onclick="confirmRestore()">Restore</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────
+const API     = '';
+const WS_BASE = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host;
+const params  = new URLSearchParams(location.search);
+const docId   = params.get('id');
+const token   = localStorage.getItem('token');
+const userId  = localStorage.getItem('user_id');
+const username = localStorage.getItem('username');
+const avatarColor = localStorage.getItem('avatar_color') || '#6366f1';
+const isReadonlyParam = params.get('readonly') === 'true';
+
+if (!token || !docId) window.location.href = '/dashboard';
+
+// ── State ─────────────────────────────────────────────────
+let ws = null;
+let wsVersion = 0;
+let pendingOps = [];
+let isReadOnly = isReadonlyParam;
+let canEdit = false;
+let isOwner = false;
+let currentRole = 'viewer';
+let saveTimer  = null;
+let typingTimer = null;
+let isTyping = false;
+let suppressInput = false;  // prevent re-triggering OT on remote changes
+let restoreVersionId = null;
+let createdLinkUrl = '';
+
+// Dark mode
+const darkBtn = document.getElementById('darkBtn');
+function applyDark(on) {
+  document.body.classList.toggle('dark-mode', on);
+  darkBtn.textContent = on ? '☀️' : '🌙';
+  localStorage.setItem('darkMode', on ? '1' : '0');
+}
+applyDark(localStorage.getItem('darkMode') === '1');
+darkBtn.addEventListener('click', () => applyDark(!document.body.classList.contains('dark-mode')));
+
+// ── Toast ─────────────────────────────────────────────────
+function toast(msg, type='info') {
+  const icons = {success:'✅', error:'❌', warning:'⚠️', info:'ℹ️'};
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ️'}</span><span class="toast-msg">${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>{el.classList.add('toast-out');setTimeout(()=>el.remove(),250);}, 3500);
+}
+
+// ── Modals ────────────────────────────────────────────────
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(ov =>
+  ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('open'); })
+);
+
+// ── Sidebar ───────────────────────────────────────────────
+function toggleSidebar() {
+  document.getElementById('editorSidebar').classList.toggle('collapsed');
+}
+
+function switchTab(panelId, btn) {
+  document.querySelectorAll('.sidebar-panel, #chatPanel').forEach(p => {
+    p.classList.remove('active');
+    if (p.id !== 'chatPanel') p.style.display = '';
+  });
+  document.querySelectorAll('.sidebar-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  if (panelId === 'chatPanel') {
+    const panel = document.getElementById('chatPanel');
+    panel.style.display = 'flex';
+    panel.classList.add('active');
+    setTimeout(() => scrollChatBottom(), 50);
+  } else {
+    const panel = document.getElementById(panelId);
+    panel.classList.add('active');
+    panel.style.display = 'block';
+    if (panelId === 'historyPanel') loadVersions();
+  }
+}
+
+// ── Connection status ─────────────────────────────────────
+function setStatus(state, text) {
+  const dot  = document.getElementById('statusDot');
+  const span = document.getElementById('statusText');
+  dot.className = 'status-dot ' + state;
+  span.textContent = text;
+}
+
+// ── Role pill ─────────────────────────────────────────────
+function setRolePill(role) {
+  const pill = document.getElementById('rolePill');
+  const labels = {owner:'Owner', editor:'Editor', viewer:'Viewer'};
+  pill.textContent = labels[role] || role;
+  pill.className = `role-pill ${role}`;
+}
+
+// ── Word / char / line count ──────────────────────────────
+function updateCounts() {
+  const val  = document.getElementById('editor').value;
+  const words = val.trim() ? val.trim().split(/\s+/).length : 0;
+  document.getElementById('wordCount').textContent = words + ' word' + (words !== 1 ? 's' : '');
+  document.getElementById('charCount').textContent = val.length + ' chars';
+  document.getElementById('lineCount').textContent = val.split('\n').length + ' lines';
+}
+
+// ── WebSocket setup ───────────────────────────────────────
+function connectWS() {
+  setStatus('connecting', 'Connecting…');
+  ws = new WebSocket(`${WS_BASE}/ws/documents/${docId}?token=${token}`);
+
+  ws.onopen = () => {};
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    handleMessage(msg);
+  };
+
+  ws.onclose = (e) => {
+    setStatus('disconnected', 'Disconnected');
+    if (e.code !== 4001 && e.code !== 4003) {
+      setTimeout(connectWS, 3000);
+    }
+  };
+
+  ws.onerror = () => setStatus('disconnected', 'Connection error');
+}
+
+function sendWS(payload) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(payload));
+  }
+}
+
+// ── Handle incoming WS messages ───────────────────────────
+function handleMessage(msg) {
+  switch (msg.type) {
+
+    case 'initial_state': {
+      setStatus('connected', 'Connected');
+      const ed = document.getElementById('editor');
+      suppressInput = true;
+      ed.value = msg.content || '';
+      suppressInput = false;
+      lastContent = msg.content || '';   // ← sync lastContent to actual document content
+      wsVersion = msg.version || 0;
+      canEdit = msg.can_edit && !isReadonlyParam;
+      isReadOnly = !canEdit;
+      currentRole = msg.user_role || 'viewer';
+
+      setRolePill(currentRole === 'owner' ? 'owner' : canEdit ? 'editor' : 'viewer');
+
+      if (isReadOnly) {
+        ed.setAttribute('readonly', true);
+        ed.classList.add('readonly');
+        document.getElementById('readonlyBanner').classList.remove('hidden');
+        document.getElementById('saveBtn').disabled = true;
+      }
+
+      if (msg.document) {
+        document.getElementById('docTitle').value = msg.document.title || '';
+        document.title = (msg.document.title || 'Document') + ' — CollabNote Pro';
+        if (msg.document.title) {
+          document.getElementById('docTitle').value = msg.document.title;
+        }
+      }
+
+      document.getElementById('versionLabel').textContent = 'v' + wsVersion;
+      updateActiveUsers(msg.active_users || []);
+      updateCounts();
+
+      // Render chat history
+      if (msg.chat_history) {
+        msg.chat_history.forEach(m => appendChatMessage(m));
+      }
+
+      // Show add-collaborator button to owner/editor
+      if (canEdit) {
+        document.getElementById('addCollabBtn').style.display = 'block';
+      }
+
+      loadCollaborators();
+      break;
+    }
+
+    case 'operation': {
+      // Apply remote operation to our editor
+      if (msg.user_id === userId) break; // our own ACK—skip
+      const ed = document.getElementById('editor');
+      const op = msg.operation;
+      const before = ed.value;
+      const selStart = ed.selectionStart;
+      const selEnd   = ed.selectionEnd;
+
+      suppressInput = true;
+      ed.value = applyOpLocally(before, op);
+      suppressInput = false;
+      lastContent = ed.value;   // ← keep lastContent in sync after remote op
+
+      // Adjust cursor position
+      ed.selectionStart = adjustCursor(selStart, op);
+      ed.selectionEnd   = adjustCursor(selEnd, op);
+
+      wsVersion = msg.version;
+      document.getElementById('versionLabel').textContent = 'v' + wsVersion;
+      updateCounts();
+      break;
+    }
+
+    case 'operation_ack':
+      wsVersion = msg.version;
+      document.getElementById('versionLabel').textContent = 'v' + wsVersion;
+      setSaveIndicator('saved');
+      break;
+
+    case 'operation_reject':
+      // Server rejected op — do a full refresh
+      fetchAndSync();
+      break;
+
+    case 'user_joined':
+      toast(`${msg.username} joined`, 'info');
+      updateActiveUsers(msg.active_users || []);
+      break;
+
+    case 'user_left':
+      toast(`${msg.username} left`, 'info');
+      updateActiveUsers(msg.active_users || []);
+      clearTypingFor(msg.user_id);
+      break;
+
+    case 'active_users':
+      updateActiveUsers(msg.active_users || []);
+      break;
+
+    case 'cursor':
+      // Could render cursor overlay — skipped for textarea simplicity
+      break;
+
+    case 'typing':
+      if (msg.user_id !== userId) {
+        showTypingIndicator(msg.user_id, msg.username, msg.avatar_color, msg.is_typing);
+      }
+      break;
+
+    case 'chat':
+      appendChatMessage(msg);
+      break;
+
+    case 'title_update':
+      if (msg.user_id !== userId) {
+        document.getElementById('docTitle').value = msg.title;
+        document.title = msg.title + ' — CollabNote Pro';
+      }
+      break;
+
+    case 'error':
+      toast(msg.message || 'Unknown error', 'error');
+      break;
+
+    case 'pong':
+      break;
+  }
+}
+
+// ── OT apply locally (mirrors server-side Python) ─────────
+function applyOpLocally(content, op) {
+  const type = op.type || op.operation_type;
+  const pos = Math.max(0, Math.min(op.position || 0, content.length));
+
+  if (type === 'insert') {
+    return content.slice(0, pos) + (op.content || '') + content.slice(pos);
+  } else if (type === 'delete') {
+    const end = Math.min(pos + (op.length || 0), content.length);
+    return content.slice(0, pos) + content.slice(end);
+  } else if (type === 'replace') {
+    const end = Math.min(pos + (op.length || 0), content.length);
+    return content.slice(0, pos) + (op.content || '') + content.slice(end);
+  } else if (type === 'full_replace') {
+    return op.content || '';
+  }
+  return content;
+}
+
+function adjustCursor(cursorPos, op) {
+  const type = op.type || op.operation_type;
+  const pos  = op.position || 0;
+  if (type === 'insert') {
+    if (pos <= cursorPos) return cursorPos + (op.content || '').length;
+  } else if (type === 'delete') {
+    const len = op.length || 0;
+    if (pos + len <= cursorPos) return cursorPos - len;
+    if (pos <= cursorPos) return pos;
+  }
+  return cursorPos;
+}
+
+// ── Send operation ────────────────────────────────────────
+function sendOperation(op) {
+  setSaveIndicator('saving');
+  sendWS({ type: 'operation', operation: op, client_version: wsVersion });
+}
+
+// ── Editor input → OT operations ─────────────────────────
+let lastContent = '';
+
+document.getElementById('editor').addEventListener('input', (e) => {
+  if (suppressInput || isReadOnly) return;
+  updateCounts();
+
+  const ed = document.getElementById('editor');
+  const newContent = ed.value;
+  const old = lastContent;
+  lastContent = newContent;
+
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    setSaveIndicator('saving');
+    scheduleSave();
+    return;
+  }
+
+  // Diff: find the simplest operation that transforms old → new
+  const op = diffToOp(old, newContent);
+  if (op) sendOperation(op);
+
+  // Typing indicator
+  if (!isTyping) {
+    isTyping = true;
+    sendWS({ type: 'typing', is_typing: true });
+  }
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => {
+    isTyping = false;
+    sendWS({ type: 'typing', is_typing: false });
+  }, 1500);
+});
+
+// Simple diff: find first diff point and last diff point
+function diffToOp(oldStr, newStr) {
+  if (oldStr === newStr) return null;
+
+  let start = 0;
+  while (start < oldStr.length && start < newStr.length && oldStr[start] === newStr[start]) start++;
+
+  let oldEnd = oldStr.length - 1;
+  let newEnd = newStr.length - 1;
+  while (oldEnd >= start && newEnd >= start && oldStr[oldEnd] === newStr[newEnd]) {
+    oldEnd--; newEnd--;
+  }
+
+  const oldSuffix = oldStr.slice(oldEnd + 1);
+  const newSuffix = newStr.slice(newEnd + 1);
+
+  const deleteLen = oldEnd - start + 1;
+  const insertTxt = newStr.slice(start, newEnd + 1);
+
+  if (deleteLen <= 0 && insertTxt) {
+    return { type: 'insert', position: start, content: insertTxt };
+  } else if (deleteLen > 0 && !insertTxt) {
+    return { type: 'delete', position: start, length: deleteLen };
+  } else if (deleteLen > 0 && insertTxt) {
+    return { type: 'replace', position: start, length: deleteLen, content: insertTxt };
+  }
+  return null;
+}
+
+// ── Title change ──────────────────────────────────────────
+document.getElementById('docTitle').addEventListener('input', (e) => {
+  if (isReadOnly) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    sendWS({ type: 'title_update', title: e.target.value });
+    saveTitleViaREST(e.target.value);
+  }, 800);
+});
+
+function saveTitleViaREST(title) {
+  fetch(`${API}/api/documents/${docId}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title })
+  });
+}
+
+// ── Save ──────────────────────────────────────────────────
+function setSaveIndicator(state) {
+  const el = document.getElementById('saveIndicator');
+  const texts = { saving:'Saving…', saved:'Saved ✓', error:'Save failed' };
+  const connected = document.getElementById('statusDot').className.includes('connected');
+  if (connected) {
+    el.className = 'save-indicator ' + state;
+    el.querySelector('#statusText').textContent = texts[state] || '';
+  }
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 3000);
+}
+
+async function saveNow() {
+  if (isReadOnly) return;
+  const content = document.getElementById('editor').value;
+  setSaveIndicator('saving');
+  try {
+    await fetch(`${API}/api/documents/${docId}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    });
+    setSaveIndicator('saved');
+    document.getElementById('autosaveLabel').textContent = 'Auto-saved ' + new Date().toLocaleTimeString();
+  } catch {
+    setSaveIndicator('error');
+  }
+}
+
+async function fetchAndSync() {
+  try {
+    const res = await fetch(`${API}/api/documents/${docId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const doc = await res.json();
+    suppressInput = true;
+    document.getElementById('editor').value = doc.content || '';
+    suppressInput = false;
+    wsVersion = doc.current_version;
+    document.getElementById('versionLabel').textContent = 'v' + wsVersion;
+    updateCounts();
+  } catch {}
+}
+
+// ── Active users ──────────────────────────────────────────
+function updateActiveUsers(users) {
+  document.getElementById('activeCount').textContent = users.length;
+  const list = document.getElementById('activeUsersList');
+  list.innerHTML = users.map(u => `
+    <div class="user-item">
+      <span class="avatar avatar-sm" style="background:${u.avatar_color}">${u.username[0].toUpperCase()}</span>
+      <span class="user-item-name">${esc(u.username)}${u.user_id === userId ? ' (you)' : ''}</span>
+      <span class="user-item-role">${u.role}</span>
+    </div>
+  `).join('');
+}
+
+// ── Typing indicators ─────────────────────────────────────
+const typingUsers = {};
+function showTypingIndicator(uid, uname, color, isTyping_) {
+  if (isTyping_) {
+    typingUsers[uid] = { username: uname, color };
+  } else {
+    delete typingUsers[uid];
+  }
+  renderTypingIndicators();
+}
+function clearTypingFor(uid) {
+  delete typingUsers[uid];
+  renderTypingIndicators();
+}
+function renderTypingIndicators() {
+  const el = document.getElementById('typingIndicators');
+  const names = Object.values(typingUsers).map(u => u.username);
+  if (!names.length) { el.innerHTML = ''; return; }
+  const text = names.length === 1
+    ? `${names[0]} is typing`
+    : names.length === 2
+      ? `${names[0]} and ${names[1]} are typing`
+      : `${names.length} people are typing`;
+  el.innerHTML = `
+    <div class="typing-dot"></div>
+    <div class="typing-dot"></div>
+    <div class="typing-dot"></div>
+    <span>${text}…</span>
+  `;
+}
+
+// ── Collaborators ─────────────────────────────────────────
+async function loadCollaborators() {
+  try {
+    const res = await fetch(`${API}/api/documents/${docId}/collaborators`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const collabs = await res.json();
+    const list = document.getElementById('collaboratorsList');
+    if (!collabs.length) {
+      list.innerHTML = '<div class="text-muted text-sm">No collaborators yet</div>';
+      return;
+    }
+    list.innerHTML = collabs.map(c => `
+      <div class="user-item">
+        <span class="avatar avatar-sm" style="background:${c.avatar_color}">${c.username[0].toUpperCase()}</span>
+        <span class="user-item-name">${esc(c.username)}</span>
+        <span class="user-item-role">${c.role}</span>
+      </div>
+    `).join('');
+
+    // Determine if current user is owner
+    const docRes = await fetch(`${API}/api/documents/${docId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const doc = await docRes.json();
+    isOwner = doc.owner_id === userId;
+    if (isOwner) {
+      document.getElementById('addCollabBtn').style.display = 'block';
+      document.getElementById('shareBtn').style.display = '';
+    } else if (!canEdit) {
+      document.getElementById('shareBtn').style.display = 'none';
+    }
+  } catch {}
+}
+
+// ── Version history ───────────────────────────────────────
+async function loadVersions() {
+  try {
+    const res = await fetch(`${API}/api/documents/${docId}/versions`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const versions = await res.json();
+    document.getElementById('versionCount').textContent = versions.length;
+    const list = document.getElementById('versionsList');
+    if (!versions.length) {
+      list.innerHTML = '<div class="text-muted text-sm">No versions saved yet</div>';
+      return;
+    }
+    list.innerHTML = versions.map(v => `
+      <div class="version-item" onclick="previewVersion('${v.id}', ${v.version_number})">
+        <div><span class="version-item-num">v${v.version_number}</span>
+          ${v.change_summary ? ` — ${esc(v.change_summary)}` : ''}
+        </div>
+        <div class="version-item-date">${new Date(v.saved_at).toLocaleString()}</div>
+        ${v.author_username ? `<div class="version-item-author">by ${esc(v.author_username)}</div>` : ''}
+        ${canEdit ? `<button class="version-restore-btn" onclick="event.stopPropagation();askRestore('${v.id}',${v.version_number})">⏪ Restore</button>` : ''}
+      </div>
+    `).join('');
+  } catch {}
+}
+
+function askRestore(id, num) {
+  restoreVersionId = id;
+  document.getElementById('restoreVersionLabel').textContent = `version ${num}`;
+  openModal('restoreModal');
+}
+
+async function confirmRestore() {
+  if (!restoreVersionId) return;
+  try {
+    const res = await fetch(`${API}/api/documents/${docId}/versions/${restoreVersionId}/restore`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const doc = await res.json();
+    suppressInput = true;
+    document.getElementById('editor').value = doc.content || '';
+    suppressInput = false;
+    wsVersion = doc.current_version;
+    document.getElementById('versionLabel').textContent = 'v' + wsVersion;
+    updateCounts();
+    lastContent = doc.content || '';
+    closeModal('restoreModal');
+    toast('Version restored!', 'success');
+    loadVersions();
+  } catch (err) {
+    toast('Restore failed', 'error');
+  }
+}
+
+// ── Chat ──────────────────────────────────────────────────
+function scrollChatBottom() {
+  const wrap = document.getElementById('chatMessagesWrap');
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+function appendChatMessage(msg) {
+  const empty = document.getElementById('chatEmpty');
+  if (empty) empty.style.display = 'none';
+
+  const wrap = document.getElementById('chatMessagesWrap');
+  const isSelf = msg.user_id === userId;
+  const time = new Date(msg.created_at || Date.now()).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+
+  const el = document.createElement('div');
+  el.className = 'chat-message animate-fade';
+  el.innerHTML = `
+    <span class="avatar avatar-sm" style="background:${msg.avatar_color||'#6366f1'}">${(msg.username||'?')[0].toUpperCase()}</span>
+    <div class="chat-message-body">
+      <div class="chat-message-header">
+        <span class="chat-message-user" style="color:${msg.avatar_color||'var(--primary)'}">${esc(msg.username)}</span>
+        <span class="chat-message-time">${time}</span>
+      </div>
+      <div class="chat-message-text">${esc(msg.message)}</div>
+    </div>
+  `;
+  wrap.appendChild(el);
+  scrollChatBottom();
+}
+
+function handleChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+}
+
+function sendChat() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  sendWS({ type: 'chat', message: msg });
+  input.value = '';
+  input.style.height = 'auto';
+}
+
+// ── Share modal helpers ───────────────────────────────────
+function openShareModal() {
+  openModal('shareModal');
+  switchShareTab('addCollab');
+}
+
+function openCollabModal() {
+  openShareModal();
+}
+
+function switchShareTab(tab) {
+  ['addCollab','createLink','manageLinks'].forEach(t => {
+    document.getElementById('share-' + t).classList.toggle('hidden', t !== tab);
+    document.getElementById('st-' + t).classList.toggle('active', t === tab);
+  });
+  if (tab === 'manageLinks') loadShareLinks();
+}
+
+let searchTimer2 = null;
+async function searchUsers(q) {
+  clearTimeout(searchTimer2);
+  const results = document.getElementById('userSearchResults');
+  if (!q || q.length < 2) { results.innerHTML = ''; return; }
+  searchTimer2 = setTimeout(async () => {
+    const res = await fetch(`${API}/api/users/search?q=${encodeURIComponent(q)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const users = await res.json();
+    results.innerHTML = users.map(u => `
+      <div class="user-item" style="cursor:pointer;border:1px solid var(--border);border-radius:var(--r);padding:.5rem;margin-bottom:.3rem"
+           onclick="selectUser('${u.username}')">
+        <span class="avatar avatar-sm" style="background:${u.avatar_color}">${u.username[0].toUpperCase()}</span>
+        <span>${esc(u.username)}</span>
+        ${u.full_name ? `<span class="text-muted text-xs">${esc(u.full_name)}</span>` : ''}
+      </div>
+    `).join('') || '<div class="text-muted text-sm">No users found</div>';
+  }, 300);
+}
+
+function selectUser(uname) {
+  document.getElementById('collabUsername').value = uname;
+  document.getElementById('collabSearch').value = uname;
+  document.getElementById('userSearchResults').innerHTML = '';
+}
+
+async function addCollaborator() {
+  const uname = document.getElementById('collabUsername').value.trim();
+  const role  = document.getElementById('collabRole').value;
+  if (!uname) { toast('Enter a username', 'warning'); return; }
+  try {
+    const res = await fetch(`${API}/api/documents/${docId}/collaborators`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: uname, role })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed');
+    toast(`${uname} added as ${role}`, 'success');
+    document.getElementById('collabUsername').value = '';
+    document.getElementById('collabSearch').value = '';
+    loadCollaborators();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function createShareLink() {
+  const perm    = document.getElementById('linkPermission').value;
+  const pass    = document.getElementById('linkPassword').value;
+  const expiry  = document.getElementById('linkExpiry').value;
+  const maxUses = document.getElementById('linkMaxUses').value;
+
+  const body = { permission: perm };
+  if (pass)    body.password   = pass;
+  if (expiry)  body.expires_at = new Date(expiry).toISOString();
+  if (maxUses) body.max_uses   = parseInt(maxUses);
+
+  try {
+    const res = await fetch(`${API}/api/sharing/documents/${docId}/links`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed');
+    createdLinkUrl = data.link_url;
+    document.getElementById('createdLinkText').textContent = data.link_url;
+    document.getElementById('createdLinkBox').classList.remove('hidden');
+    toast('Share link created!', 'success');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+function copyLink() {
+  navigator.clipboard.writeText(createdLinkUrl).then(() => toast('Link copied!', 'success'));
+}
+
+async function loadShareLinks() {
+  const el = document.getElementById('shareLinksList');
+  try {
+    const res = await fetch(`${API}/api/sharing/documents/${docId}/links`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) { el.innerHTML = '<div class="text-muted text-sm">No access</div>'; return; }
+    const links = await res.json();
+    if (!links.length) { el.innerHTML = '<div class="text-muted text-sm">No active share links</div>'; return; }
+    el.innerHTML = links.map(l => `
+      <div class="card" style="margin-bottom:.75rem;padding:.85rem">
+        <div class="flex items-center justify-between" style="margin-bottom:.4rem">
+          <span class="badge ${l.permission==='editor'?'badge-success':'badge-neutral'}">${l.permission}</span>
+          ${l.has_password ? '<span class="badge badge-warning">🔒 Password</span>' : ''}
+          <span class="text-xs text-muted">Used: ${l.use_count}${l.max_uses?'/'+l.max_uses:''}</span>
+        </div>
+        <div style="font-size:.75rem;word-break:break-all;color:var(--primary);margin-bottom:.5rem">${l.link_url}</div>
+        <div class="flex gap-2">
+          <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText('${l.link_url}').then(()=>toast('Copied!','success'))">📋 Copy</button>
+          <button class="btn btn-sm btn-danger" onclick="revokeLink('${l.token}')">Revoke</button>
+        </div>
+        ${l.expires_at ? `<div class="text-xs text-muted mt-1">Expires: ${new Date(l.expires_at).toLocaleString()}</div>` : ''}
+      </div>
+    `).join('');
+  } catch {
+    el.innerHTML = '<div class="text-muted text-sm">Failed to load links</div>';
+  }
+}
+
+async function revokeLink(token_) {
+  try {
+    await fetch(`${API}/api/sharing/links/${token_}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    toast('Link revoked', 'success');
+    loadShareLinks();
+  } catch {
+    toast('Failed to revoke', 'error');
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function esc(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    if (!isReadOnly) saveNow();
+  }
+});
+
+// Ping to keep WS alive
+setInterval(() => { if (ws && ws.readyState === WebSocket.OPEN) sendWS({type:'ping'}); }, 25000);
+
+// Auto-save every 30s
+setInterval(() => { if (!isReadOnly) saveNow(); }, 30000);
+
+// ── Init ──────────────────────────────────────────────────
+lastContent = '';   // will be overwritten by initial_state
+connectWS();
+</script>
+</body>
+</html>

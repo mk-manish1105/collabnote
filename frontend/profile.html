@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile — CollabNote Pro</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="toast-container"></div>
+
+<!-- Top Bar -->
+<header class="app-topbar">
+  <a href="/dashboard" class="topbar-logo">
+    <span>📝</span><span>CollabNote</span>
+  </a>
+  <div class="topbar-right" style="margin-left:auto">
+    <a href="/dashboard" class="btn btn-ghost btn-sm">← Dashboard</a>
+    <button class="btn btn-secondary btn-sm" onclick="logout()">Sign Out</button>
+  </div>
+</header>
+
+<main class="app-content" style="max-width:760px">
+
+  <div id="errorAlert" class="alert alert-error hidden"></div>
+  <div id="successAlert" class="alert alert-success hidden"></div>
+
+  <!-- Profile Header -->
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="profile-header">
+      <div class="avatar avatar-xl" id="avatarEl" style="background:var(--primary);font-size:1.8rem">?</div>
+      <div>
+        <h1 id="profileUsername" style="margin-bottom:.2rem">Loading…</h1>
+        <p class="text-muted" id="profileEmail" style="font-size:.9rem"></p>
+        <p class="text-muted text-sm" id="profileJoined"></p>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="profile-stats">
+      <div class="stat-card">
+        <div class="stat-value" id="statDocs">—</div>
+        <div class="stat-label">Documents</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statCollabs">—</div>
+        <div class="stat-label">Collaborations</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statLastSeen">—</div>
+        <div class="stat-label">Last Active</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Profile -->
+  <div class="card" style="margin-bottom:1.5rem">
+    <h2 style="margin-bottom:1.25rem">✏️ Edit Profile</h2>
+
+    <div class="form-group">
+      <label>Full Name</label>
+      <input type="text" id="fullName" placeholder="Your display name" maxlength="100">
+    </div>
+
+    <div class="form-group">
+      <label>Bio</label>
+      <textarea id="bio" placeholder="Tell people a bit about yourself…" rows="3" maxlength="500"
+                style="resize:vertical"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Avatar Color</label>
+      <div class="color-picker-row" id="colorPicker"></div>
+    </div>
+
+    <div class="flex gap-3">
+      <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
+      <button class="btn btn-secondary" onclick="loadProfile()">Reset</button>
+    </div>
+  </div>
+
+  <!-- Change Password -->
+  <div class="card">
+    <h2 style="margin-bottom:1.25rem">🔒 Change Password</h2>
+
+    <div class="form-group">
+      <label>Current Password</label>
+      <input type="password" id="currentPwd" placeholder="Your current password">
+    </div>
+
+    <div class="form-group">
+      <label>New Password</label>
+      <input type="password" id="newPwd" placeholder="At least 6 characters" minlength="6">
+    </div>
+
+    <div class="form-group">
+      <label>Confirm New Password</label>
+      <input type="password" id="confirmPwd" placeholder="Repeat new password">
+    </div>
+
+    <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
+  </div>
+
+</main>
+
+<script>
+const API   = '';
+const token = localStorage.getItem('token');
+const userId = localStorage.getItem('user_id');
+if (!token) window.location.href = '/login';
+
+const COLORS = [
+  '#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6',
+  '#8b5cf6','#ef4444','#14b8a6','#f97316','#06b6d4'
+];
+
+let selectedColor = localStorage.getItem('avatar_color') || '#6366f1';
+
+function toast(msg, type='info') {
+  const icons = {success:'✅', error:'❌', warning:'⚠️', info:'ℹ️'};
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span class="toast-icon">${icons[type]}</span><span class="toast-msg">${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>{el.classList.add('toast-out');setTimeout(()=>el.remove(),250);}, 3500);
+}
+
+function buildColorPicker() {
+  const picker = document.getElementById('colorPicker');
+  picker.innerHTML = COLORS.map(c => `
+    <div class="color-swatch ${c === selectedColor ? 'selected' : ''}"
+         style="background:${c}"
+         onclick="selectColor('${c}', this)"
+         title="${c}"></div>
+  `).join('');
+}
+
+function selectColor(color, el) {
+  selectedColor = color;
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('avatarEl').style.background = color;
+}
+
+async function loadProfile() {
+  try {
+    const res = await fetch(`${API}/api/users/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.status === 401) { logout(); return; }
+    const user = await res.json();
+
+    // Avatar
+    const av = document.getElementById('avatarEl');
+    av.textContent = user.username[0].toUpperCase();
+    av.style.background = user.avatar_color;
+    selectedColor = user.avatar_color;
+
+    document.getElementById('profileUsername').textContent = '@' + user.username;
+    document.getElementById('profileEmail').textContent = user.email;
+    document.getElementById('profileJoined').textContent =
+      'Member since ' + new Date(user.created_at).toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'});
+
+    document.getElementById('fullName').value = user.full_name || '';
+    document.getElementById('bio').value = user.bio || '';
+
+    // Last seen
+    const ls = new Date(user.last_seen);
+    const diff = Date.now() - ls.getTime();
+    const seenStr = diff < 60000 ? 'Just now' :
+                    diff < 3600000 ? Math.floor(diff/60000) + 'm ago' :
+                    diff < 86400000 ? Math.floor(diff/3600000) + 'h ago' :
+                    ls.toLocaleDateString();
+    document.getElementById('statLastSeen').textContent = seenStr;
+
+    buildColorPicker();
+    await loadStats();
+  } catch (err) {
+    document.getElementById('errorAlert').textContent = err.message;
+    document.getElementById('errorAlert').classList.remove('hidden');
+  }
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch(`${API}/api/documents/`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const docs = await res.json();
+    const owned = docs.filter(d => d.owner_id === userId).length;
+    const collab = docs.filter(d => d.owner_id !== userId).length;
+    document.getElementById('statDocs').textContent = owned;
+    document.getElementById('statCollabs').textContent = collab;
+  } catch {}
+}
+
+async function saveProfile() {
+  const payload = {
+    full_name: document.getElementById('fullName').value.trim() || null,
+    bio: document.getElementById('bio').value.trim() || null,
+    avatar_color: selectedColor,
+  };
+  try {
+    const res = await fetch(`${API}/api/users/me`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Update failed');
+    localStorage.setItem('avatar_color', selectedColor);
+    toast('Profile updated!', 'success');
+    loadProfile();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function changePassword() {
+  const current = document.getElementById('currentPwd').value;
+  const newPwd  = document.getElementById('newPwd').value;
+  const confirm = document.getElementById('confirmPwd').value;
+
+  if (!current || !newPwd) { toast('Fill in all fields', 'warning'); return; }
+  if (newPwd !== confirm)   { toast('New passwords do not match', 'error'); return; }
+  if (newPwd.length < 6)    { toast('New password must be at least 6 characters', 'warning'); return; }
+
+  try {
+    const res = await fetch(`${API}/api/users/me/password`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_password: current, new_password: newPwd })
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    toast('Password changed successfully!', 'success');
+    ['currentPwd','newPwd','confirmPwd'].forEach(id => document.getElementById(id).value = '');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+function logout() {
+  ['token','user_id','username','avatar_color','full_name'].forEach(k => localStorage.removeItem(k));
+  window.location.href = '/login';
+}
+
+loadProfile();
+</script>
+</body>
+</html>

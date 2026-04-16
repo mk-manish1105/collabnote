@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register — CollabNote Pro</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="toast-container"></div>
+
+<div class="auth-page">
+  <!-- Left Panel -->
+  <div class="auth-left">
+    <div class="auth-left-content">
+      <div style="font-size:3rem;margin-bottom:1rem">🚀</div>
+      <h1>Join CollabNote</h1>
+      <p>Create your free account and start collaborating in minutes</p>
+      <ul class="auth-features">
+        <li>Free to use — no credit card needed</li>
+        <li>Create unlimited documents</li>
+        <li>Invite unlimited collaborators</li>
+        <li>Real-time presence & cursors</li>
+        <li>Auto-save with full version history</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Right Panel -->
+  <div class="auth-right">
+    <div class="auth-box animate-fade">
+      <div class="auth-logo">
+        <div class="logo-icon">📝</div>
+        <span>CollabNote Pro</span>
+      </div>
+
+      <h2 class="auth-title">Create account</h2>
+      <p class="auth-subtitle">Fill in the details below to get started</p>
+
+      <div id="errorAlert" class="alert alert-error hidden"></div>
+      <div id="successAlert" class="alert alert-success hidden"></div>
+
+      <form id="registerForm" autocomplete="on">
+        <div class="form-group">
+          <label for="full_name">Full Name <span style="color:var(--text-light);font-weight:400">(optional)</span></label>
+          <input type="text" id="full_name" placeholder="Your full name" autocomplete="name">
+        </div>
+
+        <div class="form-group">
+          <label for="username">Username <span style="color:var(--danger)">*</span></label>
+          <div class="input-group">
+            <span class="input-icon">👤</span>
+            <input type="text" id="username" placeholder="lowercase, letters & numbers"
+                   autocomplete="username" required minlength="3" maxlength="50"
+                   pattern="[a-zA-Z0-9_]+">
+          </div>
+          <span id="usernameHint" style="font-size:.75rem;color:var(--text-light)">
+            3–50 characters, letters, numbers, underscores only
+          </span>
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email <span style="color:var(--danger)">*</span></label>
+          <div class="input-group">
+            <span class="input-icon">✉️</span>
+            <input type="email" id="email" placeholder="you@example.com"
+                   autocomplete="email" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password <span style="color:var(--danger)">*</span></label>
+          <div class="input-group">
+            <span class="input-icon">🔒</span>
+            <input type="password" id="password" placeholder="At least 6 characters"
+                   autocomplete="new-password" required minlength="6">
+            <button type="button" id="togglePwd"
+                    style="position:absolute;right:.75rem;background:none;border:none;cursor:pointer;color:var(--text-light)">
+              👁️
+            </button>
+          </div>
+          <!-- Password strength bar -->
+          <div id="strengthBar" style="height:4px;border-radius:2px;background:var(--border);margin-top:.4rem;overflow:hidden">
+            <div id="strengthFill" style="height:100%;width:0;transition:width .3s,background .3s;border-radius:2px"></div>
+          </div>
+          <span id="strengthText" style="font-size:.72rem;color:var(--text-light)"></span>
+        </div>
+
+        <div class="form-group">
+          <label for="confirmPassword">Confirm Password <span style="color:var(--danger)">*</span></label>
+          <div class="input-group">
+            <span class="input-icon">🔒</span>
+            <input type="password" id="confirmPassword" placeholder="Repeat your password"
+                   autocomplete="new-password" required>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
+          Create Account
+        </button>
+      </form>
+
+      <div class="divider-text" style="margin:1.5rem 0;font-size:.8rem">ALREADY HAVE AN ACCOUNT?</div>
+
+      <a href="/login" class="btn btn-secondary btn-block">Sign In Instead</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+
+function toast(msg, type='info') {
+  const icons = {success:'✅', error:'❌', warning:'⚠️', info:'ℹ️'};
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ️'}</span><span class="toast-msg">${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>{ el.classList.add('toast-out'); setTimeout(()=>el.remove(), 250); }, 4000);
+}
+
+// Password toggle
+document.getElementById('togglePwd').addEventListener('click', () => {
+  const el = document.getElementById('password');
+  el.type = el.type === 'password' ? 'text' : 'password';
+});
+
+// Password strength
+document.getElementById('password').addEventListener('input', function() {
+  const val = this.value;
+  const fill = document.getElementById('strengthFill');
+  const text = document.getElementById('strengthText');
+  let strength = 0;
+  if (val.length >= 6) strength++;
+  if (val.length >= 10) strength++;
+  if (/[A-Z]/.test(val)) strength++;
+  if (/[0-9]/.test(val)) strength++;
+  if (/[^A-Za-z0-9]/.test(val)) strength++;
+
+  const levels = ['','Weak','Fair','Good','Strong','Very Strong'];
+  const colors = ['','var(--danger)','var(--warning)','#f59e0b','var(--success)','var(--success)'];
+  fill.style.width = (strength * 20) + '%';
+  fill.style.background = colors[strength] || 'var(--border)';
+  text.textContent = levels[strength] || '';
+  text.style.color = colors[strength] || 'var(--text-light)';
+});
+
+// Form submit
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const errorAlert = document.getElementById('errorAlert');
+  const successAlert = document.getElementById('successAlert');
+  errorAlert.classList.add('hidden');
+  successAlert.classList.add('hidden');
+
+  const password = document.getElementById('password').value;
+  const confirm  = document.getElementById('confirmPassword').value;
+
+  if (password !== confirm) {
+    errorAlert.textContent = 'Passwords do not match';
+    errorAlert.classList.remove('hidden');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.classList.add('btn-loading');
+  btn.textContent = 'Creating account…';
+
+  const payload = {
+    username:  document.getElementById('username').value.trim(),
+    email:     document.getElementById('email').value.trim(),
+    password,
+    full_name: document.getElementById('full_name').value.trim() || null,
+  };
+
+  try {
+    const res = await fetch(`${API}/api/users/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Registration failed');
+
+    // Auto-login
+    localStorage.setItem('token', data.access_token);
+    localStorage.setItem('user_id', data.user.id);
+    localStorage.setItem('username', data.user.username);
+    localStorage.setItem('avatar_color', data.user.avatar_color);
+    localStorage.setItem('full_name', data.user.full_name || '');
+
+    successAlert.textContent = `Account created! Redirecting…`;
+    successAlert.classList.remove('hidden');
+    toast('Welcome to CollabNote, ' + data.user.username + '!', 'success');
+    setTimeout(() => { window.location.href = '/dashboard'; }, 800);
+
+  } catch (err) {
+    errorAlert.textContent = err.message;
+    errorAlert.classList.remove('hidden');
+    btn.disabled = false;
+    btn.classList.remove('btn-loading');
+    btn.textContent = 'Create Account';
+  }
+});
+
+if (localStorage.getItem('token')) window.location.href = '/dashboard';
+</script>
+</body>
+</html>

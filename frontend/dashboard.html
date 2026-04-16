@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — CollabNote Pro</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="toast-container"></div>
+
+<!-- Top Bar -->
+<header class="app-topbar">
+  <a href="/dashboard" class="topbar-logo">
+    <span>📝</span>
+    <span>CollabNote</span>
+    <span class="topbar-logo logo-dot"></span>
+    <span style="font-size:.75rem;font-weight:400;color:var(--text-muted)">Pro</span>
+  </a>
+
+  <!-- Search -->
+  <div class="topbar-search">
+    <div class="input-group">
+      <span class="input-icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="Search documents…"
+             style="padding-left:2.5rem;border-radius:var(--r-full)">
+    </div>
+  </div>
+
+  <!-- Right actions -->
+  <div class="topbar-right">
+    <button class="btn btn-ghost btn-sm btn-icon" id="darkModeBtn" title="Toggle dark mode">🌙</button>
+    <a href="/profile" class="btn btn-ghost btn-sm">
+      <span id="topbarAvatar" class="avatar avatar-sm" style="background:var(--primary)">U</span>
+      <span id="topbarUsername"></span>
+    </a>
+    <button class="btn btn-secondary btn-sm" onclick="logout()">Sign Out</button>
+  </div>
+</header>
+
+<!-- Main Content -->
+<main class="app-content">
+
+  <!-- Welcome row -->
+  <div class="flex items-center justify-between" style="margin-bottom:1.5rem">
+    <div>
+      <h1 style="margin-bottom:.25rem">My Documents</h1>
+      <p class="text-muted text-sm" id="docCountLabel">Loading…</p>
+    </div>
+    <button class="btn btn-primary" onclick="openCreateModal()">
+      ＋ New Document
+    </button>
+  </div>
+
+  <!-- Share link opener -->
+  <div class="card" style="margin-bottom:1.5rem;background:var(--primary-light);border-color:rgba(99,102,241,.3)">
+    <div class="flex items-center gap-3">
+      <span style="font-size:1.5rem">🔗</span>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:.9rem;color:var(--primary-dark)">Have a share link?</div>
+        <div class="flex gap-2 mt-2">
+          <input type="text" id="shareLinkInput" placeholder="Paste share link here…"
+                 style="flex:1;padding:.5rem .75rem;border-radius:var(--r-full);border:1px solid rgba(99,102,241,.4);background:white;font-size:.85rem;outline:none">
+          <button class="btn btn-primary btn-sm" onclick="openShareLink()">Open →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters row -->
+  <div class="flex items-center gap-3" style="margin-bottom:1rem;flex-wrap:wrap">
+    <div class="flex gap-2" id="filterTabs">
+      <button class="btn btn-sm btn-primary" data-filter="all" onclick="setFilter('all', this)">All</button>
+      <button class="btn btn-sm btn-secondary" data-filter="owned" onclick="setFilter('owned', this)">Mine</button>
+      <button class="btn btn-sm btn-secondary" data-filter="shared" onclick="setFilter('shared', this)">Shared with me</button>
+    </div>
+    <div id="activeTags" class="flex gap-2 flex-wrap" style="margin-left:auto"></div>
+  </div>
+
+  <!-- Error -->
+  <div id="errorAlert" class="alert alert-error hidden"></div>
+
+  <!-- Grid -->
+  <div id="docsGrid" class="docs-grid">
+    <!-- Skeletons while loading -->
+    <div class="skeleton" style="height:180px;border-radius:var(--r-lg)"></div>
+    <div class="skeleton" style="height:180px;border-radius:var(--r-lg)"></div>
+    <div class="skeleton" style="height:180px;border-radius:var(--r-lg)"></div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="emptyState" class="hidden" style="text-align:center;padding:4rem 2rem;color:var(--text-muted)">
+    <div style="font-size:3.5rem;margin-bottom:1rem">📭</div>
+    <h3 style="margin-bottom:.5rem">No documents yet</h3>
+    <p style="margin-bottom:1.5rem">Create your first document to get started</p>
+    <button class="btn btn-primary" onclick="openCreateModal()">＋ Create Document</button>
+  </div>
+</main>
+
+<!-- FAB -->
+<button class="fab" onclick="openCreateModal()" title="New document">＋</button>
+
+<!-- ── Create Document Modal ─────────────────────────── -->
+<div class="modal-overlay" id="createModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>✨ New Document</h2>
+      <button class="modal-close" onclick="closeModal('createModal')">✕</button>
+    </div>
+
+    <div class="form-group">
+      <label>Title</label>
+      <input type="text" id="newDocTitle" placeholder="My awesome document" required autofocus maxlength="200">
+    </div>
+
+    <div class="form-group">
+      <label>Tags <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-light)">(optional, press Enter)</span></label>
+      <div class="tags-input-wrapper" id="tagsWrapper" onclick="document.getElementById('tagInput').focus()">
+        <input type="text" id="tagInput" class="tags-input" placeholder="Add a tag…">
+      </div>
+    </div>
+
+    <div class="flex gap-3 mt-4">
+      <button class="btn btn-secondary" style="flex:1" onclick="closeModal('createModal')">Cancel</button>
+      <button class="btn btn-primary" style="flex:1" onclick="createDocument()">Create →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Delete Confirm Modal ──────────────────────────── -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <h2>🗑️ Delete Document?</h2>
+      <button class="modal-close" onclick="closeModal('deleteModal')">✕</button>
+    </div>
+    <p style="color:var(--text-muted);margin-bottom:1.5rem">
+      This will permanently delete "<strong id="deleteDocTitle"></strong>" and all its versions. This cannot be undone.
+    </p>
+    <div class="flex gap-3">
+      <button class="btn btn-secondary" style="flex:1" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn btn-danger" style="flex:1" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API      = '';
+const token    = localStorage.getItem('token');
+const userId   = localStorage.getItem('user_id');
+const username = localStorage.getItem('username');
+const avatarColor = localStorage.getItem('avatar_color') || '#6366f1';
+
+if (!token) window.location.href = '/login';
+
+// Init topbar
+document.getElementById('topbarUsername').textContent = username;
+const av = document.getElementById('topbarAvatar');
+av.textContent = (username || 'U')[0].toUpperCase();
+av.style.background = avatarColor;
+
+// State
+let allDocs  = [];
+let filter   = 'all';
+let tagTags  = [];
+let deleteId = null;
+let searchTimer = null;
+
+// ── Toast ────────────────────────────────────────────────
+function toast(msg, type='info') {
+  const icons = {success:'✅', error:'❌', warning:'⚠️', info:'ℹ️'};
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span class="toast-icon">${icons[type]}</span><span class="toast-msg">${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>{el.classList.add('toast-out');setTimeout(()=>el.remove(),250);}, 3500);
+}
+
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  if (id === 'createModal') {
+    document.getElementById('newDocTitle').value = '';
+    tagTags = [];
+    renderTagChips();
+  }
+}
+
+// Close on overlay click
+document.querySelectorAll('.modal-overlay').forEach(ov => {
+  ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('open'); });
+});
+
+// ── Dark mode ────────────────────────────────────────────
+const darkBtn = document.getElementById('darkModeBtn');
+function applyDark(on) {
+  document.body.classList.toggle('dark-mode', on);
+  darkBtn.textContent = on ? '☀️' : '🌙';
+  localStorage.setItem('darkMode', on ? '1' : '0');
+}
+applyDark(localStorage.getItem('darkMode') === '1');
+darkBtn.addEventListener('click', () => applyDark(!document.body.classList.contains('dark-mode')));
+
+// ── Fetch docs ───────────────────────────────────────────
+async function fetchDocs(search = '') {
+  try {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    const res = await fetch(`${API}/api/documents/?${params}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.status === 401) { logout(); return; }
+    if (!res.ok) throw new Error('Failed to load');
+    allDocs = await res.json();
+    renderDocs();
+  } catch (err) {
+    document.getElementById('errorAlert').textContent = err.message;
+    document.getElementById('errorAlert').classList.remove('hidden');
+  }
+}
+
+function setFilter(f, btn) {
+  filter = f;
+  document.querySelectorAll('[data-filter]').forEach(b => {
+    b.className = b === btn ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+  });
+  renderDocs();
+}
+
+function renderDocs() {
+  const grid = document.getElementById('docsGrid');
+  const empty = document.getElementById('emptyState');
+
+  let docs = allDocs;
+  if (filter === 'owned')  docs = docs.filter(d => d.owner_id === userId);
+  if (filter === 'shared') docs = docs.filter(d => d.owner_id !== userId);
+
+  document.getElementById('docCountLabel').textContent =
+    `${docs.length} document${docs.length !== 1 ? 's' : ''}`;
+
+  if (docs.length === 0) {
+    grid.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  grid.innerHTML = docs.map(doc => {
+    const isOwner = doc.owner_id === userId;
+    const role = doc.user_role || (isOwner ? 'owner' : 'viewer');
+    const roleBadge = role === 'owner'
+      ? `<span class="badge badge-primary">Owner</span>`
+      : role === 'editor'
+        ? `<span class="badge badge-success">Editor</span>`
+        : `<span class="badge badge-neutral">Viewer</span>`;
+
+    const tags = (doc.tags || []).map(t =>
+      `<span class="badge badge-neutral" style="cursor:pointer" onclick="filterByTag('${t}',event)">${t}</span>`
+    ).join('');
+
+    const updated = timeAgo(doc.updated_at);
+
+    return `
+    <div class="doc-card animate-fade" onclick="openDoc('${doc.id}','${role}')">
+      <div class="doc-card-actions">
+        ${isOwner ? `<button class="btn btn-ghost btn-icon btn-sm"
+          onclick="event.stopPropagation();showDeleteModal('${doc.id}','${esc(doc.title)}')"
+          title="Delete">🗑️</button>` : ''}
+      </div>
+      <div class="doc-card-title">${esc(doc.title)}</div>
+      <div class="doc-card-preview">${esc(doc.content) || '<em style="color:var(--text-light)">Empty document</em>'}</div>
+      ${tags ? `<div class="doc-card-tags">${tags}</div>` : ''}
+      <div class="doc-card-meta">
+        <span class="doc-card-date">Updated ${updated}</span>
+        <div class="flex gap-2 items-center">
+          ${doc.collaborator_count > 0 ? `<span class="text-xs text-muted">👥 ${doc.collaborator_count}</span>` : ''}
+          ${roleBadge}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterByTag(tag, e) {
+  e.stopPropagation();
+  const params = new URLSearchParams(window.location.search);
+  params.set('tag', tag);
+  // Show active tag filter
+  toast(`Filtered by tag: ${tag}`, 'info');
+}
+
+function openDoc(id, role) {
+  const readonly = role === 'viewer' ? '&readonly=true' : '';
+  window.location.href = `/editor?id=${id}${readonly}`;
+}
+
+// ── Tags input ───────────────────────────────────────────
+const tagInput = document.getElementById('tagInput');
+
+tagInput.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ',') && tagInput.value.trim()) {
+    e.preventDefault();
+    const tag = tagInput.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (tag && !tagTags.includes(tag) && tagTags.length < 8) {
+      tagTags.push(tag);
+      renderTagChips();
+    }
+    tagInput.value = '';
+  }
+  if (e.key === 'Backspace' && !tagInput.value && tagTags.length) {
+    tagTags.pop();
+    renderTagChips();
+  }
+});
+
+function renderTagChips() {
+  const wrapper = document.getElementById('tagsWrapper');
+  // Remove existing chips
+  wrapper.querySelectorAll('.tag-chip').forEach(c => c.remove());
+  tagTags.forEach((tag, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `${tag}<button type="button" onclick="removeTag(${i})">×</button>`;
+    wrapper.insertBefore(chip, tagInput);
+  });
+}
+
+function removeTag(i) {
+  tagTags.splice(i, 1);
+  renderTagChips();
+}
+
+// ── Create document ──────────────────────────────────────
+function openCreateModal() {
+  openModal('createModal');
+  setTimeout(() => document.getElementById('newDocTitle').focus(), 100);
+}
+
+async function createDocument() {
+  const title = document.getElementById('newDocTitle').value.trim();
+  if (!title) { toast('Please enter a document title', 'warning'); return; }
+
+  try {
+    const res = await fetch(`${API}/api/documents/`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, tags: tagTags })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to create');
+    closeModal('createModal');
+    toast('Document created!', 'success');
+    window.location.href = `/editor?id=${data.id}`;
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+// Allow Enter key in title field
+document.getElementById('newDocTitle').addEventListener('keydown', e => {
+  if (e.key === 'Enter') createDocument();
+});
+
+// ── Delete document ──────────────────────────────────────
+function showDeleteModal(id, title) {
+  deleteId = id;
+  document.getElementById('deleteDocTitle').textContent = title;
+  openModal('deleteModal');
+}
+
+async function confirmDelete() {
+  if (!deleteId) return;
+  try {
+    const res = await fetch(`${API}/api/documents/${deleteId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok && res.status !== 204) {
+      const d = await res.json();
+      throw new Error(d.detail || 'Delete failed');
+    }
+    closeModal('deleteModal');
+    toast('Document deleted', 'success');
+    allDocs = allDocs.filter(d => d.id !== deleteId);
+    deleteId = null;
+    renderDocs();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+// ── Share link opener ────────────────────────────────────
+function openShareLink() {
+  const val = document.getElementById('shareLinkInput').value.trim();
+  if (!val) { toast('Paste a share link first', 'warning'); return; }
+  const match = val.match(/\/shared\/([^/?#]+)/);
+  if (match) {
+    window.location.href = `/shared/${match[1]}`;
+  } else {
+    toast('Invalid share link format', 'error');
+  }
+}
+
+// ── Search ───────────────────────────────────────────────
+document.getElementById('searchInput').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => fetchDocs(e.target.value.trim()), 350);
+});
+
+// ── Logout ───────────────────────────────────────────────
+function logout() {
+  ['token','user_id','username','avatar_color','full_name'].forEach(k => localStorage.removeItem(k));
+  window.location.href = '/login';
+}
+
+// ── Helpers ──────────────────────────────────────────────
+function esc(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60)    return 'just now';
+  if (s < 3600)  return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  if (s < 604800)return Math.floor(s/86400) + 'd ago';
+  return new Date(dateStr).toLocaleDateString();
+}
+
+// ── Init ─────────────────────────────────────────────────
+fetchDocs();
+</script>
+</body>
+</html>
